@@ -85,8 +85,8 @@ export function usePayments(filter?: string) {
             const { data: signed, error: signErr } = await supabase.storage
               .from("payment-screenshots")
               .createSignedUrl(p.screenshot_url, 60 * 60);
-            if (!signErr && signed?.signedURL) {
-              p.screenshot_url = signed.signedURL as any;
+            if (!signErr && signed?.signedUrl) {
+              p.screenshot_url = signed.signedUrl as any;
               // eslint-disable-next-line no-console
               console.debug("[usePayments] signed screenshot:", p.id, p.screenshot_url);
             } else {
@@ -152,8 +152,8 @@ export function useMyPayments() {
             const { data: signed, error: signErr } = await supabase.storage
               .from("payment-screenshots")
               .createSignedUrl(p.screenshot_url, 60 * 60);
-            if (!signErr && signed?.signedURL) {
-              p.screenshot_url = signed.signedURL as any;
+            if (!signErr && signed?.signedUrl) {
+              p.screenshot_url = signed.signedUrl as any;
               // eslint-disable-next-line no-console
               console.debug("[useMyPayments] signed screenshot:", p.id, p.screenshot_url);
             } else {
@@ -245,6 +245,31 @@ export function useUpdatePaymentStatus() {
         .single();
 
       if (error) throw error;
+
+      // If payment was approved, mark the team as registered
+      if (status === "approved" && data?.team_id) {
+        try {
+          await supabase
+            .from("teams")
+            .update({ status: "registered" })
+            .eq("id", data.team_id);
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      // If payment was rejected, ban the user (set profile.is_banned = true)
+      if (status === "rejected" && data?.user_id) {
+        try {
+          await supabase
+            .from("profiles")
+            .update({ is_banned: true })
+            .eq("user_id", data.user_id);
+        } catch (e) {
+          // ignore
+        }
+      }
+
       return data;
     },
     onSuccess: () => {

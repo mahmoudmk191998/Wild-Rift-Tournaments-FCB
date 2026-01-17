@@ -37,7 +37,8 @@ const Footer = () => {
             <h4 className="font-bold text-foreground mb-6">تواصل معنا</h4>
             <ul className="space-y-4">
               <li className="flex items-center gap-3 text-muted-foreground"><div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center"><Mail className="w-4 h-4 text-primary" /></div><span className="text-sm">support@riftarena.com</span></li>
-              <li className="flex items-center gap-3 text-muted-foreground"><div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center"><Phone className="w-4 h-4 text-primary" /></div><span className="text-sm" dir="ltr">+20 100 000 0000</span></li>
+              <li className="flex items-center gap-3 text-muted-foreground"><div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center"><Phone className="w-4 h-4 text-primary" /></div><span className="text-sm" dir="ltr">01552342086</span></li>
+              <li className="flex items-center gap-3 text-muted-foreground"><div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center"><ExternalLink className="w-4 h-4 text-primary" /></div><a href="https://riftmasters.online" className="text-sm hover:text-primary">riftmasters.online</a></li>
             </ul>
           </div>
         </div>
