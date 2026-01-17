@@ -50,11 +50,11 @@ const menuItems = [
   },
 ];
 
-const AdminSidebar = () => {
+const AdminSidebar = ({ isDrawer = false }: { isDrawer?: boolean }) => {
   const location = useLocation();
   
   return (
-    <aside className="fixed right-0 top-0 h-screen w-64 bg-card border-l border-border/50 z-40 flex flex-col">
+    <aside className={isDrawer ? "w-64 bg-card border-l border-border/50 z-40 flex flex-col h-full" : "hidden lg:flex fixed right-0 top-0 h-screen w-64 bg-card border-l border-border/50 z-40 flex flex-col"}>
       {/* Logo */}
       <div className="p-6 border-b border-border/50">
         <Link to="/" className="flex items-center gap-3">
