@@ -22,6 +22,7 @@ import { useTeam, useTeamMembers } from "@/hooks/useTeams";
 import { useTournament } from "@/hooks/useTournaments";
 import { useTeamJoinRequests, useCreateJoinRequest, useRespondToJoinRequest, useRemoveTeamMember } from "@/hooks/useJoinRequests";
 import { useCreatePayment, uploadPaymentScreenshot } from "@/hooks/usePayments";
+import { useAllSiteContent } from "@/hooks/useSiteContent";
 import { useAuth } from "@/contexts/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
@@ -40,6 +41,16 @@ const TeamDetails = () => {
   const respondToRequest = useRespondToJoinRequest();
   const removeMember = useRemoveTeamMember();
   const createPayment = useCreatePayment();
+  const { data: siteContent } = useAllSiteContent();
+
+  const paymentSettings = (() => {
+    const settings = siteContent?.find((c: any) => c.key === "settings");
+    const meta = settings?.metadata as any | undefined;
+    return {
+      instapay: meta?.instaPayNumber || "01552342086",
+      vodafone: meta?.vodafoneNumber || "01552342086",
+    };
+  })();
   
   const [joinDialogOpen, setJoinDialogOpen] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -93,7 +104,7 @@ const TeamDetails = () => {
       await createPayment.mutateAsync({
         teamId: team.id,
         tournamentId: team.tournament_id,
-        amount: tournament.entry_fee * (tournament.team_size || 5),
+        amount: tournament.entry_fee,
         screenshotUrl,
         paymentMethod,
       });
@@ -409,7 +420,7 @@ const TeamDetails = () => {
                           <DialogHeader>
                             <DialogTitle>رفع إيصال الدفع</DialogTitle>
                             <DialogDescription>
-                              المبلغ المطلوب: {tournament ? tournament.entry_fee * (tournament.team_size || 5) : 0} جنيه
+                              المبلغ المطلوب لكل لاعب: {tournament ? tournament.entry_fee : 0} جنيه
                             </DialogDescription>
                           </DialogHeader>
                           <div className="space-y-4 py-4">
@@ -430,6 +441,23 @@ const TeamDetails = () => {
                                 >
                                   فودافون كاش
                                 </Button>
+                              </div>
+                            </div>
+                            <div className="p-4 rounded-lg bg-muted/20 border border-border/30">
+                              <div className="text-sm text-muted-foreground">تفاصيل التحويل</div>
+                              <div className="mt-2">
+                                {paymentMethod === "instapay" ? (
+                                  <div className="flex items-center justify-between">
+                                    <div className="text-sm">InstaPay / المحفظة:</div>
+                                    <div className="font-medium" dir="ltr">{paymentSettings.instapay}</div>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-between">
+                                    <div className="text-sm">فودافون كاش:</div>
+                                    <div className="font-medium" dir="ltr">{paymentSettings.vodafone}</div>
+                                  </div>
+                                )}
+                                <div className="text-xs text-muted-foreground mt-2">تأكد من تحويل المبلغ إلى الرقم الصحيح قبل رفع إيصال الدفع.</div>
                               </div>
                             </div>
                             <div>
