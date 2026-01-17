@@ -1,36 +1,58 @@
 import { cn } from "@/lib/utils";
 import { Shield, Edit, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-interface Team {
-  id: string;
-  name: string;
-  played: number;
-  wins: number;
-  losses: number;
-  points: number;
-  qualified?: boolean;
-}
+import { useState, useEffect } from "react";
+import { useGroupStandings, useUpdateStanding } from "@/hooks/useGroups";
+import { Input } from "@/components/ui/input";
 
 interface GroupStageTableProps {
+  groupId: string;
   groupName: string;
   groupLetter: string;
-  teams: Team[];
   qualifyCount?: number;
-  onEditTeam?: (team: Team) => void;
+  onEditTeam?: (standing: any) => void;
   editable?: boolean;
 }
 
 const GroupStageTable = ({ 
+  groupId,
   groupName, 
   groupLetter, 
-  teams, 
   qualifyCount = 2,
   onEditTeam,
   editable = false
 }: GroupStageTableProps) => {
-  const sortedTeams = [...teams].sort((a, b) => b.points - a.points);
+  const { data: standings } = useGroupStandings(groupId);
+  const updateStanding = useUpdateStanding();
+  const [editing, setEditing] = useState<any | null>(null);
+  const [wins, setWins] = useState(0);
+  const [losses, setLosses] = useState(0);
+  const [draws, setDraws] = useState(0);
+  const [points, setPoints] = useState(0);
+  const [gamesPlayed, setGamesPlayed] = useState(0);
+
+  useEffect(() => {
+    if (editing) {
+      setWins(editing.wins || 0);
+      setLosses(editing.losses || 0);
+      setDraws(editing.draws || 0);
+      setPoints(editing.points || 0);
+      setGamesPlayed(editing.games_played || 0);
+    }
+  }, [editing]);
+
+  const sortedTeams = (standings || []).slice().sort((a: any, b: any) => (b.points || 0) - (a.points || 0));
   
+  const handleSave = async () => {
+    if (!editing) return;
+    try {
+      await updateStanding.mutateAsync({ id: editing.id, wins, losses, draws, points, games_played: gamesPlayed });
+      setEditing(null);
+    } catch (e) {
+      // handled by hook
+    }
+  };
+
   return (
     <div className="gaming-card overflow-hidden">
       <div className="bg-gradient-to-l from-primary/20 to-transparent p-4 border-b border-border/50">
@@ -64,11 +86,11 @@ const GroupStageTable = ({
             </tr>
           </thead>
           <tbody>
-            {sortedTeams.map((team, index) => {
+            {sortedTeams.map((s: any, index: number) => {
               const isQualified = index < qualifyCount;
               return (
                 <tr 
-                  key={team.id}
+                  key={s.id}
                   className={cn(
                     "border-b border-border/20 transition-colors",
                     isQualified && "bg-success/5"
@@ -89,24 +111,24 @@ const GroupStageTable = ({
                       <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
                         <Shield className="w-4 h-4 text-primary" />
                       </div>
-                      <span className="font-medium">{team.name}</span>
+                      <span className="font-medium">{s.teams?.name || 'Team'}</span>
                       {isQualified && (
                         <Trophy className="w-4 h-4 text-success" />
                       )}
                     </div>
                   </td>
-                  <td className="py-3 px-4 text-center text-muted-foreground">{team.played}</td>
-                  <td className="py-3 px-4 text-center text-success">{team.wins}</td>
-                  <td className="py-3 px-4 text-center text-destructive">{team.losses}</td>
+                  <td className="py-3 px-4 text-center text-muted-foreground">{s.games_played || 0}</td>
+                  <td className="py-3 px-4 text-center text-success">{s.wins || 0}</td>
+                  <td className="py-3 px-4 text-center text-destructive">{s.losses || 0}</td>
                   <td className="py-3 px-4 text-center">
-                    <span className="font-gaming text-lg">{team.points}</span>
+                    <span className="font-gaming text-lg">{s.points || 0}</span>
                   </td>
                   {editable && (
                     <td className="py-3 px-4 text-center">
                       <Button 
                         variant="ghost" 
                         size="sm"
-                        onClick={() => onEditTeam?.(team)}
+                        onClick={() => setEditing(s)}
                       >
                         <Edit className="w-4 h-4" />
                       </Button>
@@ -123,6 +145,48 @@ const GroupStageTable = ({
         <div className="w-3 h-3 rounded-full bg-success/50" />
         <span>أول {qualifyCount} فرق تتأهل للمرحلة التالية</span>
       </div>
+
+      {/* Edit Standing Modal */}
+      {editing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setEditing(null)} />
+          <div className="bg-background p-6 rounded-xl z-10 w-full max-w-md">
+            <h3 className="font-bold mb-4">تعديل ترتيب الفريق</h3>
+            <div className="space-y-3">
+              <div>
+                <div className="text-sm text-muted-foreground">الفريق</div>
+                <div className="font-medium">{editing.teams?.name}</div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="text-sm text-muted-foreground">الألعاب</div>
+                  <Input type="number" value={gamesPlayed} onChange={(e) => setGamesPlayed(parseInt(e.target.value || '0'))} />
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">النقاط</div>
+                  <Input type="number" value={points} onChange={(e) => setPoints(parseInt(e.target.value || '0'))} />
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">فوز</div>
+                  <Input type="number" value={wins} onChange={(e) => setWins(parseInt(e.target.value || '0'))} />
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">خسارة</div>
+                  <Input type="number" value={losses} onChange={(e) => setLosses(parseInt(e.target.value || '0'))} />
+                </div>
+                <div className="col-span-2">
+                  <div className="text-sm text-muted-foreground">تعادلات</div>
+                  <Input type="number" value={draws} onChange={(e) => setDraws(parseInt(e.target.value || '0'))} />
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setEditing(null)}>إلغاء</Button>
+              <Button variant="gaming" onClick={handleSave} disabled={updateStanding.isLoading}>{updateStanding.isLoading ? 'جارٍ الحفظ...' : 'حفظ'}</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

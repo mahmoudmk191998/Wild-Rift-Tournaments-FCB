@@ -110,11 +110,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string,
     metadata: { username: string; riot_id?: string; rank?: string }
   ) => {
+    const redirectTo = (import.meta.env.VITE_SITE_URL as string) || window.location.origin;
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: window.location.origin,
+        emailRedirectTo: redirectTo,
         data: metadata,
       },
     });
