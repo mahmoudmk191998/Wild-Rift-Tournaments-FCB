@@ -46,6 +46,7 @@ const AdminTournaments = () => {
     max_teams: 16,
     team_size: 5,
     entry_fee: 150,
+    prize_pool: 0,
     platform_fee_percentage: 10,
     tournament_type: "group_knockout" as "group_knockout" | "single_elimination",
     match_type: "bo1" as "bo1" | "bo3" | "bo5",
@@ -72,6 +73,7 @@ const AdminTournaments = () => {
       max_teams: 16,
       team_size: 5,
       entry_fee: 150,
+      prize_pool: 0,
       platform_fee_percentage: 10,
       tournament_type: "group_knockout",
       match_type: "bo1",
@@ -90,7 +92,7 @@ const AdminTournaments = () => {
     const tournamentData = {
       ...formData,
       status: "registration_open" as const,
-      prize_pool: 0,
+      prize_pool: Number(formData.prize_pool) || 0,
     };
 
     if (editingTournament) {
@@ -112,6 +114,7 @@ const AdminTournaments = () => {
       max_teams: tournament.max_teams,
       team_size: tournament.team_size,
       entry_fee: tournament.entry_fee,
+      prize_pool: tournament.prize_pool || 0,
       platform_fee_percentage: tournament.platform_fee_percentage,
       tournament_type: tournament.tournament_type,
       match_type: tournament.match_type,
@@ -287,6 +290,10 @@ const AdminTournaments = () => {
                   <div>
                     <Label>رسوم الاشتراك (ج.م)</Label>
                     <Input type="number" value={formData.entry_fee} onChange={(e) => setFormData({ ...formData, entry_fee: parseFloat(e.target.value) })} />
+                  </div>
+                  <div>
+                    <Label>مجموع الجوائز (ج.م)</Label>
+                    <Input type="number" value={formData.prize_pool} onChange={(e) => setFormData({ ...formData, prize_pool: parseFloat(e.target.value) || 0 })} />
                   </div>
                   <div>
                     <Label>نوع البطولة</Label>
