@@ -50,8 +50,8 @@ const Navbar = () => {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-20">
           <Link to="/" className="flex items-center gap-3 group">
-            <div className="w-12 h-12 rounded-xl bg-gradient-gaming flex items-center justify-center">
-              <Flame className="w-6 h-6 text-white" />
+            <div className="w-12 h-12 rounded-xl overflow-hidden bg-transparent flex items-center justify-center">
+              <img src="/riftmaster.PNG" alt="Riftmaster" className="w-full h-full object-cover" />
             </div>
             <div className="hidden sm:block">
               <span className="font-gaming text-xl text-primary block leading-tight">RIFT</span>
