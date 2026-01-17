@@ -16,9 +16,12 @@ import {
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTournaments } from "@/hooks/useTournaments";
-import { useGroups, useGroupStandings } from "@/hooks/useGroups";
+import { useGroups, useGroupStandings, useCreateGroups, useAssignTeamToGroup } from "@/hooks/useGroups";
 import { useMatches } from "@/hooks/useMatches";
+import { useTeams } from "@/hooks/useTeams";
+import { useNavigate } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton";
+import MatchResultModal from "@/components/admin/MatchResultModal";
 
 const AdminGroups = () => {
   const [selectedTournament, setSelectedTournament] = useState<string>("");
@@ -26,6 +29,10 @@ const AdminGroups = () => {
   const { data: tournaments, isLoading: tournamentsLoading } = useTournaments();
   const { data: groups, isLoading: groupsLoading } = useGroups(selectedTournament || undefined);
   const { data: matches, isLoading: matchesLoading } = useMatches(selectedTournament || undefined);
+  const createGroups = useCreateGroups();
+  const { data: teams, isLoading: teamsLoading } = useTeams(selectedTournament || undefined);
+  const assignTeam = useAssignTeamToGroup();
+  const navigate = useNavigate();
 
   // Set first tournament as default when loaded
   if (tournaments?.length && !selectedTournament) {
@@ -33,6 +40,7 @@ const AdminGroups = () => {
   }
 
   const knockoutMatches = matches?.filter(m => m.stage !== 'group') || [];
+  const [editingMatch, setEditingMatch] = useState<any | null>(null);
 
   const isLoading = tournamentsLoading || groupsLoading || matchesLoading;
 
@@ -79,10 +87,29 @@ const AdminGroups = () => {
                 ))}
               </SelectContent>
             </Select>
-            <Button variant="outline">
-              <Shuffle className="w-4 h-4 ml-2" />
-              توزيع عشوائي
-            </Button>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  if (!selectedTournament || !groups?.length || !teams) return;
+                  // Assign unassigned teams to groups in round-robin
+                  const unassigned = teams.filter(t => !t.group_name);
+                  if (!unassigned.length) return;
+                  let gi = 0;
+                  for (const team of unassigned) {
+                    const group = groups[gi % groups.length];
+                    try {
+                      await assignTeam.mutateAsync({ teamId: team.id, groupId: group.id, groupName: group.name });
+                    } catch (e) {
+                      // continue assigning others
+                    }
+                    gi++;
+                  }
+                }}
+                disabled={!teams || assignTeam.isLoading}
+              >
+                <Shuffle className="w-4 h-4 ml-2" />
+                {assignTeam.isLoading ? "جارٍ التوزيع..." : "توزيع عشوائي"}
+              </Button>
             <Button variant="gaming">
               <Settings className="w-4 h-4 ml-2" />
               إعدادات
@@ -131,11 +158,12 @@ const AdminGroups = () => {
                 {groups.map((group) => (
                   <GroupStageTable 
                     key={group.id}
+                    groupId={group.id}
                     groupName={group.name}
                     groupLetter={group.name.replace("المجموعة ", "")}
-                    teams={[]}
                     qualifyCount={2}
                     editable={true}
+                    onEditTeam={(standing) => navigate(`/teams/${standing.team_id}`)}
                   />
                 ))}
               </div>
@@ -143,9 +171,18 @@ const AdminGroups = () => {
               <div className="gaming-card p-12 text-center">
                 <Layers className="w-16 h-16 mx-auto text-muted-foreground/30 mb-4" />
                 <p className="text-muted-foreground mb-4">لا توجد مجموعات لهذه البطولة</p>
-                <Button variant="gaming">
+                <Button
+                  variant="gaming"
+                  onClick={async () => {
+                    if (!selectedTournament) return;
+                    const t = tournaments?.find((x) => x.id === selectedTournament);
+                    const numGroups = t?.num_groups || 4;
+                    await createGroups.mutateAsync({ tournamentId: selectedTournament, numGroups });
+                  }}
+                  disabled={!selectedTournament || createGroups.isLoading}
+                >
                   <Shuffle className="w-4 h-4 ml-2" />
-                  إنشاء المجموعات
+                  {createGroups.isLoading ? "جارٍ الإنشاء..." : "إنشاء المجموعات"}
                 </Button>
               </div>
             )}
@@ -166,18 +203,22 @@ const AdminGroups = () => {
               </div>
               
               {knockoutMatches.length > 0 ? (
-                <TournamentBracket 
-                  matches={knockoutMatches.map(m => ({
-                    id: m.id,
-                    team1: m.team1_id ? { name: "فريق 1", score: m.team1_score || 0 } : null,
-                    team2: m.team2_id ? { name: "فريق 2", score: m.team2_score || 0 } : null,
-                    winner: m.winner_id ? "فريق" : undefined,
-                    round: m.bracket_round || 1,
-                    position: m.bracket_position || 1,
-                  }))}
-                  rounds={3}
-                  editable={true}
-                />
+                <>
+                  <TournamentBracket 
+                    matches={knockoutMatches.map(m => ({
+                      id: m.id,
+                      team1: m.team1 ? { name: m.team1.name, score: m.team1_score || 0 } : null,
+                      team2: m.team2 ? { name: m.team2.name, score: m.team2_score || 0 } : null,
+                      winner: m.winner_id ? "فريق" : undefined,
+                      round: m.bracket_round || 1,
+                      position: m.bracket_position || 1,
+                    }))}
+                    rounds={3}
+                    editable={true}
+                    onEditMatch={(mm) => setEditingMatch(mm)}
+                  />
+                  <MatchResultModal open={!!editingMatch} match={editingMatch} onOpenChange={(o) => { if (!o) setEditingMatch(null); }} />
+                </>
               ) : (
                 <div className="text-center py-12">
                   <Trophy className="w-16 h-16 mx-auto text-muted-foreground/30 mb-4" />

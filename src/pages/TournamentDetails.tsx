@@ -8,6 +8,11 @@ import {
 import { cn } from "@/lib/utils";
 import { useTournament } from "@/hooks/useTournaments";
 import { useTeams } from "@/hooks/useTeams";
+import { useMyTeams } from "@/hooks/useTeams";
+import { useGroups, useGroupStandings } from "@/hooks/useGroups";
+import { useMatches } from "@/hooks/useMatches";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -25,6 +30,58 @@ const TournamentDetails = () => {
   const { user } = useAuth();
   const { data: tournament, isLoading: tournamentLoading } = useTournament(id);
   const { data: teams, isLoading: teamsLoading } = useTeams(id);
+  const { data: myTeams } = useMyTeams();
+  const { data: groups } = useGroups(id || undefined);
+  const { data: matches } = useMatches(id || undefined);
+
+  const [myTeam, setMyTeam] = useState<any | null>(null);
+  const [groupPosition, setGroupPosition] = useState<number | null>(null);
+  const [myGroupName, setMyGroupName] = useState<string | null>(null);
+  const [knockoutProgress, setKnockoutProgress] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!id) return;
+    // find the current user's team in this tournament
+    const own = (myTeams || []).find((t: any) => t.tournament_id === id) || (teams || []).find((t: any) => t.captain_id === user?.id);
+    setMyTeam(own || null);
+    if (own) {
+      setMyGroupName(own.group_name || null);
+    }
+  }, [myTeams, teams, id, user]);
+
+  useEffect(() => {
+    const fetchPosition = async () => {
+      if (!myTeam || !groups) return;
+      const group = groups.find((g: any) => g.name === myTeam.group_name);
+      if (!group) {
+        setGroupPosition(null);
+        return;
+      }
+      const { data: standings } = await supabase
+        .from("group_standings")
+        .select("*, teams:team_id (name)")
+        .eq("group_id", group.id)
+        .order("points", { ascending: false });
+      const pos = (standings || []).findIndex((s: any) => s.team_id === myTeam.id);
+      setGroupPosition(pos >= 0 ? pos + 1 : null);
+    };
+    fetchPosition();
+  }, [myTeam, groups]);
+
+  useEffect(() => {
+    if (!myTeam || !matches) return;
+    const myMatches = matches.filter((m: any) => m.stage !== 'group' && (m.team1_id === myTeam.id || m.team2_id === myTeam.id));
+    if (!myMatches.length) {
+      setKnockoutProgress(null);
+      return;
+    }
+    const maxRound = Math.max(...myMatches.map((m: any) => m.bracket_round || 0));
+    const roundNames = ["دور الـ 16", "ربع النهائي", "نصف النهائي", "النهائي"];
+    const idx = Math.min(Math.max(maxRound - 1, 0), roundNames.length - 1);
+    const lastMatch = myMatches.find(m => (m.bracket_round || 0) === maxRound);
+    const statusText = lastMatch?.is_completed ? (lastMatch.winner_id === myTeam.id ? "تأهلت" : "أقصيت") : "في انتظار المباراة";
+    setKnockoutProgress(`${roundNames[idx]} — ${statusText}`);
+  }, [myTeam, matches]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("ar-EG", {
@@ -284,6 +341,21 @@ const TournamentDetails = () => {
                   <div className="font-gaming text-2xl text-gold text-glow-gold">
                     {tournament.prize_pool || 0} جنيه
                   </div>
+                </div>
+
+                {/* Player Position Card */}
+                <div className="p-4 rounded-xl bg-card border border-border/50">
+                  <div className="text-sm text-muted-foreground mb-2">موقعك في البطولة</div>
+                  {myTeam ? (
+                    <div>
+                      <div className="font-medium mb-1">{myTeam.name}</div>
+                      <div className="text-sm text-muted-foreground">المجموعة: {myGroupName || '—'}</div>
+                      <div className="text-sm text-muted-foreground">الترتيب: {groupPosition ? `${groupPosition}` : '—'}</div>
+                      <div className="text-sm text-muted-foreground mt-2">الإقصائيات: {knockoutProgress || 'لم تبدأ'}</div>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">لم يتم العثور على فريقك في هذه البطولة</div>
+                  )}
                 </div>
 
                 {tournament.status === 'registration_open' && (

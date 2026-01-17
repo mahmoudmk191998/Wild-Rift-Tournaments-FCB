@@ -18,6 +18,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useUpdateProfile, uploadAvatar } from "@/hooks/useProfile";
 import { useMyTeams } from "@/hooks/useTeams";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -38,6 +39,86 @@ const ranks = [
 const Profile = () => {
   const { user, profile, isLoading: authLoading, isAdmin } = useAuth();
   const { data: myTeams, isLoading: teamsLoading } = useMyTeams();
+  const [teamStatuses, setTeamStatuses] = useState<Record<string, { groupName?: string | null; position?: number | null; knockout?: string | null }>>({});
+
+  useEffect(() => {
+    if (!myTeams || myTeams.length === 0) return;
+
+    let mounted = true;
+
+    const fetchStatuses = async () => {
+      const statuses: Record<string, { groupName?: string | null; position?: number | null; knockout?: string | null }> = {};
+
+      for (const team of myTeams) {
+        try {
+          const tournamentId = team.tournament_id;
+          const groupName = team.group_name || null;
+          let position: number | null = null;
+          let knockout: string | null = null;
+
+          if (tournamentId && groupName) {
+            const { data: groupsData } = await supabase
+              .from("groups")
+              .select("id,name")
+              .eq("tournament_id", tournamentId)
+              .eq("name", groupName)
+              .limit(1)
+              .maybeSingle();
+
+            const groupId = (groupsData as any)?.id;
+
+            if (groupId) {
+              const { data: standings } = await supabase
+                .from("group_standings")
+                .select("team_id,points")
+                .eq("group_id", groupId)
+                .order("points", { ascending: false });
+
+              if (standings && Array.isArray(standings)) {
+                const idx = standings.findIndex((s: any) => s.team_id === team.id);
+                if (idx !== -1) position = idx + 1;
+              }
+            }
+          }
+
+          if (tournamentId) {
+            const { data: matches } = await supabase
+              .from("matches")
+              .select("id,team1_id,team2_id,stage,is_completed,winner_id,round")
+              .eq("tournament_id", tournamentId)
+              .or(`team1_id.eq.${team.id},team2_id.eq.${team.id}`);
+
+            const playerMatches = matches || [];
+            if (playerMatches.length === 0) {
+              knockout = null;
+            } else {
+              const completed = playerMatches.filter((m: any) => m.is_completed).length;
+              const total = playerMatches.length;
+              const hasWin = playerMatches.some((m: any) => m.winner_id === team.id);
+              const hasLoss = playerMatches.some((m: any) => m.is_completed && m.winner_id && m.winner_id !== team.id && (m.team1_id === team.id || m.team2_id === team.id));
+
+              if (hasLoss && completed > 0 && !hasWin) knockout = "مقصى";
+              else if (hasWin) knockout = `متقدم (${completed}/${total})`;
+              else knockout = `${completed}/${total}`;
+            }
+          }
+
+          statuses[team.id] = { groupName, position, knockout };
+        } catch (e) {
+          // ignore individual team errors
+          statuses[team.id] = { groupName: team.group_name || null, position: null, knockout: null };
+        }
+      }
+
+      if (mounted) setTeamStatuses(statuses);
+    };
+
+    fetchStatuses();
+
+    return () => {
+      mounted = false;
+    };
+  }, [myTeams]);
   const updateProfile = useUpdateProfile();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -311,6 +392,11 @@ const Profile = () => {
                           ? "في انتظار الدفع"
                           : "غير مكتمل"}
                       </p>
+                      <div className="mt-2 text-sm text-muted-foreground">
+                        <div>المجموعة: {team.group_name || '—'}</div>
+                        <div>الترتيب: {teamStatuses[team.id]?.position ?? '—'}</div>
+                        <div>الإقصائيات: {teamStatuses[team.id]?.knockout ?? '—'}</div>
+                      </div>
                     </div>
                     <Button variant="ghost" size="sm" asChild>
                       <Link to={`/teams/${team.id}`}>عرض</Link>
