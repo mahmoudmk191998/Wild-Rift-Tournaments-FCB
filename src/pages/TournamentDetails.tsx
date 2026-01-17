@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTournament } from "@/hooks/useTournaments";
+import { useAllSiteContent } from "@/hooks/useSiteContent";
 import { useTeams } from "@/hooks/useTeams";
 import { useMyTeams } from "@/hooks/useTeams";
 import { useGroups, useGroupStandings } from "@/hooks/useGroups";
@@ -29,6 +30,7 @@ const TournamentDetails = () => {
   const { id } = useParams();
   const { user } = useAuth();
   const { data: tournament, isLoading: tournamentLoading } = useTournament(id);
+  const { data: siteContent } = useAllSiteContent();
   const { data: teams, isLoading: teamsLoading } = useTeams(id);
   const { data: myTeams } = useMyTeams();
   const { data: groups } = useGroups(id || undefined);
@@ -136,14 +138,30 @@ const TournamentDetails = () => {
   }
 
   const status = statusConfig[tournament.status as keyof typeof statusConfig] || statusConfig.upcoming;
-  const prizeDistribution = tournament.prize_distribution as { first?: number; second?: number; third?: number } || { first: 50, second: 30, third: 20 };
   const totalPrize = tournament.prize_pool || 0;
 
+  // Determine base distribution: use tournament.prize_distribution when present (missing places => 0)
+  // otherwise fall back to site settings or sensible defaults
+  const defaultPercents = (() => {
+    const settings = siteContent?.find((c: any) => c.key === "settings");
+    const meta = settings?.metadata as any | undefined;
+    return {
+      first: meta?.firstPlace ? Number(meta.firstPlace) : 50,
+      second: meta?.secondPlace ? Number(meta.secondPlace) : 30,
+      third: meta?.thirdPlace ? Number(meta.thirdPlace) : 20,
+    };
+  })();
+
+  const rawPd = (tournament.prize_distribution || null) as { first?: number; second?: number; third?: number } | null;
+  const prizeDistribution = rawPd
+    ? { first: rawPd.first ?? 0, second: rawPd.second ?? 0, third: rawPd.third ?? 0 }
+    : { first: defaultPercents.first, second: defaultPercents.second, third: defaultPercents.third };
+
   const prizes = [
-    { place: "المركز الأول", amount: Math.round(totalPrize * (prizeDistribution.first || 50) / 100), icon: Trophy },
-    { place: "المركز الثاني", amount: Math.round(totalPrize * (prizeDistribution.second || 30) / 100), icon: Medal },
-    { place: "المركز الثالث", amount: Math.round(totalPrize * (prizeDistribution.third || 20) / 100), icon: Medal },
-  ];
+    { place: "المركز الأول", amount: Math.round(totalPrize * (prizeDistribution.first ?? 0) / 100), icon: Trophy },
+    { place: "المركز الثاني", amount: Math.round(totalPrize * (prizeDistribution.second ?? 0) / 100), icon: Medal },
+    { place: "المركز الثالث", amount: Math.round(totalPrize * (prizeDistribution.third ?? 0) / 100), icon: Medal },
+  ].filter(p => p.amount > 0);
 
   const rules = [
     "يجب على كل لاعب أن يكون رتبته Emerald أو أعلى",

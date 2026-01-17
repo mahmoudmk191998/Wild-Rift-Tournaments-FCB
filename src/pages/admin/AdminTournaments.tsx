@@ -28,6 +28,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTournaments, useCreateTournament, useUpdateTournament, useDeleteTournament, Tournament } from "@/hooks/useTournaments";
+import { useAllSiteContent } from "@/hooks/useSiteContent";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
@@ -54,6 +55,12 @@ const AdminTournaments = () => {
     teams_per_group_qualify: 2,
   });
 
+  const [payoutPlaces, setPayoutPlaces] = useState<number>(3);
+
+  const { data: siteContent } = useAllSiteContent();
+  const [prizePercents, setPrizePercents] = useState({ first: 50, second: 30, third: 20 });
+  const [computedPrizes, setComputedPrizes] = useState({ first: 0, second: 0, third: 0 });
+
   const { data: tournaments, isLoading } = useTournaments();
   const createTournament = useCreateTournament();
   const updateTournament = useUpdateTournament();
@@ -64,6 +71,29 @@ const AdminTournaments = () => {
       navigate("/");
     }
   }, [user, isAdmin, authLoading, navigate]);
+
+  useEffect(() => {
+    if (siteContent) {
+      const settings = siteContent.find((c: any) => c.key === "settings");
+      if (settings && settings.metadata) {
+        const meta = settings.metadata as any;
+        const f = parseInt(meta.firstPlace || "60");
+        const s = parseInt(meta.secondPlace || "25");
+        const t = parseInt(meta.thirdPlace || "15");
+        setPrizePercents({ first: f, second: s, third: t });
+        setPayoutPlaces(meta.payoutPlaces ? Number(meta.payoutPlaces) : 3);
+      }
+    }
+  }, [siteContent]);
+
+  useEffect(() => {
+    const total = Number(formData.prize_pool) || 0;
+    setComputedPrizes({
+      first: payoutPlaces >= 1 ? Math.round(total * (prizePercents.first || 0) / 100) : 0,
+      second: payoutPlaces >= 2 ? Math.round(total * (prizePercents.second || 0) / 100) : 0,
+      third: payoutPlaces >= 3 ? Math.round(total * (prizePercents.third || 0) / 100) : 0,
+    });
+  }, [formData.prize_pool, prizePercents]);
 
   const resetForm = () => {
     setFormData({
@@ -89,10 +119,22 @@ const AdminTournaments = () => {
       return;
     }
 
+    const percentSum = (payoutPlaces >= 1 ? prizePercents.first : 0) + (payoutPlaces >= 2 ? prizePercents.second : 0) + (payoutPlaces >= 3 ? prizePercents.third : 0);
+    if (percentSum !== 100) {
+      toast.error("مجموع نسب توزيع الجوائز يجب أن يساوي 100% للخيارات المحددة");
+      return;
+    }
+
+    const prizeDistribution: any = {};
+    if (payoutPlaces >= 1) prizeDistribution.first = prizePercents.first;
+    if (payoutPlaces >= 2) prizeDistribution.second = prizePercents.second;
+    if (payoutPlaces >= 3) prizeDistribution.third = prizePercents.third;
+
     const tournamentData = {
       ...formData,
       status: "registration_open" as const,
       prize_pool: Number(formData.prize_pool) || 0,
+      prize_distribution: prizeDistribution,
     };
 
     if (editingTournament) {
@@ -121,6 +163,16 @@ const AdminTournaments = () => {
       num_groups: tournament.num_groups || 4,
       teams_per_group_qualify: tournament.teams_per_group_qualify || 2,
     });
+    // If this tournament has its own prize_distribution, use it
+    if ((tournament as any).prize_distribution) {
+      const pd = (tournament as any).prize_distribution as any;
+      const places = pd.third !== undefined ? 3 : pd.second !== undefined ? 2 : 1;
+      const f = pd.first !== undefined ? Number(pd.first) : (places >= 1 ? prizePercents.first : 0);
+      const s = pd.second !== undefined ? Number(pd.second) : (places >= 2 ? prizePercents.second : 0);
+      const t = pd.third !== undefined ? Number(pd.third) : (places >= 3 ? prizePercents.third : 0);
+      setPrizePercents({ first: f, second: s, third: t });
+      setPayoutPlaces(places);
+    }
     setShowCreateDialog(true);
   };
 
@@ -294,6 +346,39 @@ const AdminTournaments = () => {
                   <div>
                     <Label>مجموع الجوائز (ج.م)</Label>
                     <Input type="number" value={formData.prize_pool} onChange={(e) => setFormData({ ...formData, prize_pool: parseFloat(e.target.value) || 0 })} />
+                  </div>
+                  <div className="col-span-2">
+                    <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <div className="p-3 bg-muted/10 rounded-md text-center">
+                        <div className="text-xs text-muted-foreground">عدد المراكز الموزعة</div>
+                        <div className="mt-2 flex items-center justify-center gap-2">
+                          <Button variant={payoutPlaces===1?"primary":"ghost"} size="sm" onClick={() => setPayoutPlaces(1)}>1</Button>
+                          <Button variant={payoutPlaces===2?"primary":"ghost"} size="sm" onClick={() => setPayoutPlaces(2)}>2</Button>
+                          <Button variant={payoutPlaces===3?"primary":"ghost"} size="sm" onClick={() => setPayoutPlaces(3)}>3</Button>
+                        </div>
+                      </div>
+                      <div className="p-3 bg-amber-50 rounded-md text-center">
+                        <div className="text-xs text-muted-foreground">المركز الأول (%)</div>
+                        <Input type="number" value={String(prizePercents.first)} onChange={(e) => setPrizePercents({ ...prizePercents, first: parseInt(e.target.value || '0') })} className="mt-2 text-center" />
+                        <div className="font-gaming text-gold text-lg mt-2">{computedPrizes.first.toLocaleString()} ج.م</div>
+                      </div>
+                      <div className="p-3 bg-slate-50 rounded-md text-center">
+                        <div className="text-xs text-muted-foreground">المركز الثاني (%)</div>
+                        <Input type="number" value={String(prizePercents.second)} onChange={(e) => setPrizePercents({ ...prizePercents, second: parseInt(e.target.value || '0') })} className="mt-2 text-center" disabled={payoutPlaces < 2} />
+                        <div className="font-gaming text-lg mt-2">{computedPrizes.second.toLocaleString()} ج.م</div>
+                      </div>
+                      <div className="p-3 bg-slate-50 rounded-md text-center">
+                        <div className="text-xs text-muted-foreground">المركز الثالث (%)</div>
+                        <Input type="number" value={String(prizePercents.third)} onChange={(e) => setPrizePercents({ ...prizePercents, third: parseInt(e.target.value || '0') })} className="mt-2 text-center" disabled={payoutPlaces < 3} />
+                        <div className="font-gaming text-lg mt-2">{computedPrizes.third.toLocaleString()} ج.م</div>
+                      </div>
+                    </div>
+                    <div className="mt-3 text-sm">
+                      <span className="text-muted-foreground">المجموع: </span>
+                      <span className={( ( (payoutPlaces>=1?prizePercents.first:0) + (payoutPlaces>=2?prizePercents.second:0) + (payoutPlaces>=3?prizePercents.third:0) ) === 100) ? "text-success" : "text-destructive"}>
+                        { (payoutPlaces>=1?prizePercents.first:0) + (payoutPlaces>=2?prizePercents.second:0) + (payoutPlaces>=3?prizePercents.third:0) }%
+                      </span>
+                    </div>
                   </div>
                   <div>
                     <Label>نوع البطولة</Label>
