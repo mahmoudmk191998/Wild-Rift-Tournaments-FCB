@@ -25,6 +25,7 @@ import { useCreatePayment, uploadPaymentScreenshot, useTeamPayments } from "@/ho
 import { useAllSiteContent } from "@/hooks/useSiteContent";
 import { useAuth } from "@/contexts/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "sonner";
 
 const TeamDetails = () => {
@@ -224,10 +225,21 @@ const TeamDetails = () => {
                         className="flex items-center justify-between p-4 rounded-xl bg-muted/30 border border-border/50"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-gradient-gaming flex items-center justify-center">
-                            <span className="text-sm font-bold text-primary-foreground">
-                              {member.profiles?.username?.[0]?.toUpperCase() || "?"}
-                            </span>
+                          <div>
+                            {member.profiles?.avatar_url ? (
+                              <Avatar className="w-10 h-10">
+                                <AvatarImage src={member.profiles.avatar_url} alt={member.profiles.username} />
+                                <AvatarFallback className="bg-gradient-gaming text-sm font-bold text-primary-foreground">
+                                  {member.profiles?.username?.[0]?.toUpperCase() || "?"}
+                                </AvatarFallback>
+                              </Avatar>
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-gradient-gaming flex items-center justify-center">
+                                <span className="text-sm font-bold text-primary-foreground">
+                                  {member.profiles?.username?.[0]?.toUpperCase() || "?"}
+                                </span>
+                              </div>
+                            )}
                           </div>
                           <div>
                             <div className="flex items-center gap-2">

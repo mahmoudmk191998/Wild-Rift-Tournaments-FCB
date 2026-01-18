@@ -20,6 +20,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFo
 import { useTeams, useDeleteTeam, useUpdateTeam, useTeamMembers } from "@/hooks/useTeams";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -308,9 +309,18 @@ const AdminTeams = () => {
                           selectedMembers.map((m) => (
                             <div key={m.id} className="flex items-center justify-between gap-4 p-2 rounded-lg hover:bg-muted/10">
                               <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center font-medium text-sm">
-                                  {m.profiles?.username?.[0]?.toUpperCase() || m.user_id?.[0] || '?'}
-                                </div>
+                                {m.profiles?.avatar_url ? (
+                                  <Avatar className="w-10 h-10">
+                                    <AvatarImage src={m.profiles.avatar_url} alt={m.profiles.username || m.user_id} />
+                                    <AvatarFallback className="font-medium text-sm">
+                                      {m.profiles?.username?.[0]?.toUpperCase() || m.user_id?.[0] || '?'}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                ) : (
+                                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center font-medium text-sm">
+                                    {m.profiles?.username?.[0]?.toUpperCase() || m.user_id?.[0] || '?'}
+                                  </div>
+                                )}
                                 <div>
                                   <div className="font-medium">{m.profiles?.username || m.user_id}</div>
                                   <div className="text-xs text-muted-foreground">{m.profiles?.riot_id || m.riot_id || '—'} • {m.profiles?.rank || '—'}</div>

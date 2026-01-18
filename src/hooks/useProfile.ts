@@ -69,7 +69,12 @@ export function useUpdateProfile() {
     },
     onSuccess: async () => {
       await refreshProfile();
+      // Invalidate related caches so avatar updates propagate across the app
+      queryClient.invalidateQueries({ queryKey: ["profile", user?.id] });
       queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      queryClient.invalidateQueries({ queryKey: ["team-members"] });
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
+      queryClient.invalidateQueries({ queryKey: ["my-teams", user?.id] });
       toast.success("تم تحديث الملف الشخصي بنجاح");
     },
     onError: (error: any) => {

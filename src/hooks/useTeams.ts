@@ -27,6 +27,7 @@ export interface TeamMember {
     username: string;
     riot_id: string | null;
     rank: string | null;
+    avatar_url?: string | null;
   };
 }
 
@@ -92,7 +93,7 @@ export function useTeamMembers(teamId: string | undefined) {
       const userIds = members.map(m => m.user_id);
       const { data: profiles } = await supabase
         .from("profiles")
-        .select("user_id, username, riot_id, rank")
+        .select("user_id, username, riot_id, rank, avatar_url")
         .in("user_id", userIds);
 
       return members.map(member => ({

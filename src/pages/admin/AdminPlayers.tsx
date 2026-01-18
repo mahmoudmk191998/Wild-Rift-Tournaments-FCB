@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { useProfiles, useBanUser, Profile } from "@/hooks/useProfile";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter, SheetClose } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 const AdminPlayers = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -63,16 +64,25 @@ const AdminPlayers = () => {
       header: "اللاعب",
       render: (p: Profile) => (
         <div className="flex items-center gap-3">
-          <div className={cn(
-            "w-10 h-10 rounded-lg flex items-center justify-center",
-            p.is_banned ? "bg-destructive/20" : "bg-primary/20"
-          )}>
-            {p.is_banned ? (
-              <UserX className="w-5 h-5 text-destructive" />
-            ) : (
-              <Users className="w-5 h-5 text-primary" />
-            )}
-          </div>
+          {p.avatar_url ? (
+            <Avatar className={cn("w-10 h-10", p.is_banned ? "bg-destructive/20" : "bg-primary/20")}>
+              <AvatarImage src={p.avatar_url} alt={p.username} />
+              <AvatarFallback className="font-medium text-sm">
+                {p.username?.[0]?.toUpperCase() || "?"}
+              </AvatarFallback>
+            </Avatar>
+          ) : (
+            <div className={cn(
+              "w-10 h-10 rounded-lg flex items-center justify-center",
+              p.is_banned ? "bg-destructive/20" : "bg-primary/20"
+            )}>
+              {p.is_banned ? (
+                <UserX className="w-5 h-5 text-destructive" />
+              ) : (
+                <Users className="w-5 h-5 text-primary" />
+              )}
+            </div>
+          )}
           <div>
             <div className="flex items-center gap-2">
               <p className={cn("font-medium", p.is_banned && "line-through text-muted-foreground")}>{p.username}</p>
