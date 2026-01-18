@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import { useGroupStandings, useUpdateStanding } from "@/hooks/useGroups";
 import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 
 interface GroupStageTableProps {
   groupId: string;
@@ -24,6 +25,8 @@ const GroupStageTable = ({
 }: GroupStageTableProps) => {
   const { data: standings } = useGroupStandings(groupId);
   const updateStanding = useUpdateStanding();
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [bulkEdits, setBulkEdits] = useState<Record<string, any>>({});
   const [editing, setEditing] = useState<any | null>(null);
   const [wins, setWins] = useState(0);
   const [losses, setLosses] = useState(0);
@@ -64,10 +67,12 @@ const GroupStageTable = ({
             <h3 className="font-bold text-lg">{groupName}</h3>
           </div>
           {editable && (
-            <Button variant="ghost" size="sm">
-              <Edit className="w-4 h-4 ml-2" />
-              تعديل
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setBulkEditOpen(true)}>
+                <Edit className="w-4 h-4 ml-2" />
+                تعديل
+              </Button>
+            </div>
           )}
         </div>
       </div>
@@ -183,6 +188,54 @@ const GroupStageTable = ({
             <div className="mt-4 flex justify-end gap-2">
               <Button variant="outline" onClick={() => setEditing(null)}>إلغاء</Button>
               <Button variant="gaming" onClick={handleSave} disabled={updateStanding.isLoading}>{updateStanding.isLoading ? 'جارٍ الحفظ...' : 'حفظ'}</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Edit Modal */}
+      {bulkEditOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setBulkEditOpen(false)} />
+          <div className="bg-background p-6 rounded-xl z-10 w-full max-w-3xl">
+            <h3 className="font-bold mb-4">تعديل المجموعة بالكامل</h3>
+            <div className="space-y-4 max-h-80 overflow-auto">
+              {(standings || []).map((s: any) => (
+                <div key={s.id} className="grid grid-cols-6 gap-3 items-center border-b border-border/20 py-2">
+                  <div className="col-span-2 font-medium">{s.teams?.name}</div>
+                  <div>
+                    <div className="text-sm text-muted-foreground">الألعاب</div>
+                    <Input type="number" defaultValue={s.games_played || 0} onChange={(e) => setBulkEdits(prev => ({ ...prev, [s.id]: { ...prev[s.id], games_played: parseInt(e.target.value || '0') } }))} />
+                  </div>
+                  <div>
+                    <div className="text-sm text-muted-foreground">النقاط</div>
+                    <Input type="number" defaultValue={s.points || 0} onChange={(e) => setBulkEdits(prev => ({ ...prev, [s.id]: { ...prev[s.id], points: parseInt(e.target.value || '0') } }))} />
+                  </div>
+                  <div>
+                    <div className="text-sm text-muted-foreground">فوز</div>
+                    <Input type="number" defaultValue={s.wins || 0} onChange={(e) => setBulkEdits(prev => ({ ...prev, [s.id]: { ...prev[s.id], wins: parseInt(e.target.value || '0') } }))} />
+                  </div>
+                  <div>
+                    <div className="text-sm text-muted-foreground">خسارة</div>
+                    <Input type="number" defaultValue={s.losses || 0} onChange={(e) => setBulkEdits(prev => ({ ...prev, [s.id]: { ...prev[s.id], losses: parseInt(e.target.value || '0') } }))} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setBulkEditOpen(false)}>إلغاء</Button>
+              <Button variant="gaming" onClick={async () => {
+                try {
+                  const entries = Object.entries(bulkEdits);
+                  for (const [id, edits] of entries) {
+                    await updateStanding.mutateAsync({ id, ...edits });
+                  }
+                  setBulkEditOpen(false);
+                  setBulkEdits({});
+                } catch (e) {
+                  toast.error("حدث خطأ أثناء حفظ التعديلات");
+                }
+              }}>حفظ التعديلات</Button>
             </div>
           </div>
         </div>
