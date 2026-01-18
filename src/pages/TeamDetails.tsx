@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { useTeam, useTeamMembers } from "@/hooks/useTeams";
 import { useTournament } from "@/hooks/useTournaments";
 import { useTeamJoinRequests, useCreateJoinRequest, useRespondToJoinRequest, useRemoveTeamMember } from "@/hooks/useJoinRequests";
-import { useCreatePayment, uploadPaymentScreenshot } from "@/hooks/usePayments";
+import { useCreatePayment, uploadPaymentScreenshot, useTeamPayments } from "@/hooks/usePayments";
 import { useAllSiteContent } from "@/hooks/useSiteContent";
 import { useAuth } from "@/contexts/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -41,6 +41,7 @@ const TeamDetails = () => {
   const respondToRequest = useRespondToJoinRequest();
   const removeMember = useRemoveTeamMember();
   const createPayment = useCreatePayment();
+  const { data: teamPayments } = useTeamPayments(id);
   const { data: siteContent } = useAllSiteContent();
 
   const paymentSettings = (() => {
@@ -235,9 +236,19 @@ const TeamDetails = () => {
                                 <Crown className="w-4 h-4 text-gold" />
                               )}
                             </div>
-                            <span className="text-sm text-muted-foreground">
-                              {member.riot_id || member.profiles?.riot_id || "لا يوجد Riot ID"}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm text-muted-foreground">
+                                {member.riot_id || member.profiles?.riot_id || "لا يوجد Riot ID"}
+                              </span>
+                              {/* Payment status badge */}
+                              {(() => {
+                                const p = teamPayments?.find((tp: any) => tp.user_id === member.user_id);
+                                if (!p) return <span className="text-xs text-muted-foreground">لم يقم بالرفع</span>;
+                                if (p.status === "approved") return <span className="text-xs text-success">إيصال مقبول</span>;
+                                if (p.status === "rejected") return <span className="text-xs text-destructive">إيصال مرفوض</span>;
+                                return <span className="text-xs text-warning">قيد المراجعة</span>;
+                              })()}
+                            </div>
                           </div>
                         </div>
                         {isCaptain && member.role !== "captain" && (

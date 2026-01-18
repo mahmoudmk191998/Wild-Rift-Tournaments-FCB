@@ -170,6 +170,59 @@ export function useMyPayments() {
   });
 }
 
+export function useTeamPayments(teamId?: string) {
+  return useQuery({
+    queryKey: ["team-payments", teamId],
+    queryFn: async () => {
+      if (!teamId) return [];
+
+      const { data, error } = await supabase
+        .from("payments")
+        .select("*")
+        .eq("team_id", teamId)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      const payments = (data || []) as Payment[];
+
+      // Attach profiles for users
+      const userIds = Array.from(new Set(payments.map((p) => p.user_id).filter(Boolean)));
+      let profilesMap: Record<string, { username: string; riot_id: string | null }> = {};
+      if (userIds.length > 0) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from("profiles")
+          .select("user_id, username, riot_id")
+          .in("user_id", userIds as any[]);
+
+        if (profilesError) throw profilesError;
+
+        (profilesData || []).forEach((pr: any) => {
+          profilesMap[pr.user_id] = { username: pr.username, riot_id: pr.riot_id };
+        });
+      }
+
+      const merged = payments.map((p) => ({ ...p, profiles: profilesMap[p.user_id] || undefined }));
+
+      // Signed URLs for screenshots when needed
+      await Promise.all(
+        merged.map(async (p) => {
+          if (p.screenshot_url && !p.screenshot_url.startsWith("http")) {
+            const { data: signed, error: signErr } = await supabase.storage
+              .from("payment-screenshots")
+              .createSignedUrl(p.screenshot_url, 60 * 60);
+            if (!signErr && signed?.signedUrl) {
+              p.screenshot_url = signed.signedUrl as any;
+            }
+          }
+        })
+      );
+
+      return merged as Payment[];
+    },
+    enabled: !!teamId,
+  });
+}
+
 export function useCreatePayment() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -246,15 +299,35 @@ export function useUpdatePaymentStatus() {
 
       if (error) throw error;
 
-      // If payment was approved, mark the team as registered
+      // If payment was approved, check whether all team members have
+      // approved payments; only then mark the team as `registered`.
       if (status === "approved" && data?.team_id) {
         try {
-          await supabase
-            .from("teams")
-            .update({ status: "registered" })
-            .eq("id", data.team_id);
+          // Count current team members
+          const { data: membersData, error: membersErr } = await supabase
+            .from("team_members")
+            .select("id, user_id", { count: "exact", head: false })
+            .eq("team_id", data.team_id);
+
+          if (membersErr) throw membersErr;
+
+          const memberCount = Array.isArray(membersData) ? membersData.length : 0;
+
+          // Count approved payments for this team
+          const { data: approvedPayments } = await supabase
+            .from("payments")
+            .select("id, user_id")
+            .eq("team_id", data.team_id)
+            .eq("status", "approved");
+
+          const approvedCount = Array.isArray(approvedPayments) ? approvedPayments.length : 0;
+
+          // If every team member has an approved payment, mark registered
+          if (memberCount > 0 && approvedCount >= memberCount) {
+            await supabase.from("teams").update({ status: "registered" }).eq("id", data.team_id);
+          }
         } catch (e) {
-          // ignore
+          // ignore errors here but don't block the response
         }
       }
 

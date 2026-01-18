@@ -200,16 +200,38 @@ export function useRemoveTeamMember() {
       memberId: string;
       teamId: string;
     }) => {
-      const { error } = await supabase
+      // Return the deleted row so we can invalidate specific queries
+      const { data, error } = await supabase
         .from("team_members")
         .delete()
-        .eq("id", memberId);
+        .eq("id", memberId)
+        .select()
+        .maybeSingle();
 
       if (error) throw error;
+      return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["team-members"] });
+    onSuccess: (deleted: any, variables) => {
+      // Invalidate the team-specific members query so the team view updates
+      if (variables?.teamId) {
+        queryClient.invalidateQueries({ queryKey: ["team-members", variables.teamId] });
+      }
+
+      // Invalidate general teams list and team detail
       queryClient.invalidateQueries({ queryKey: ["teams"] });
+      if (variables?.teamId) {
+        queryClient.invalidateQueries({ queryKey: ["team", variables.teamId] });
+      }
+
+      // If we know which user was removed, invalidate their `my-teams` cache
+      if (deleted?.user_id) {
+        queryClient.invalidateQueries({ queryKey: ["my-teams", deleted.user_id] });
+        queryClient.invalidateQueries({ queryKey: ["my-teams"] });
+      } else {
+        // Fallback: invalidate all my-teams queries
+        queryClient.invalidateQueries({ queryKey: ["my-teams"] });
+      }
+
       toast.success("تم إزالة اللاعب من الفريق");
     },
     onError: (error: any) => {
