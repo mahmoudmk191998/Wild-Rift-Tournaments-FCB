@@ -16,6 +16,9 @@ import {
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTournaments } from "@/hooks/useTournaments";
+import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useGroups, useGroupStandings, useCreateGroups, useAssignTeamToGroup } from "@/hooks/useGroups";
 import { useMatches } from "@/hooks/useMatches";
 import { useTeams } from "@/hooks/useTeams";
@@ -41,6 +44,8 @@ const AdminGroups = () => {
 
   const knockoutMatches = matches?.filter(m => m.stage !== 'group') || [];
   const [editingMatch, setEditingMatch] = useState<any | null>(null);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const queryClient = useQueryClient();
 
   const isLoading = tournamentsLoading || groupsLoading || matchesLoading;
 
@@ -196,9 +201,79 @@ const AdminGroups = () => {
                   <Trophy className="w-6 h-6 text-gold" />
                   شجرة البطولة
                 </h2>
-                <Button variant="outline" size="sm">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    if (!selectedTournament) return;
+                    setIsRegenerating(true);
+                    try {
+                      // Try to get qualified teams from group_standings first
+                      const groupIds = groups?.map(g => g.id) || [];
+                      let qualifiedIds: string[] = [];
+
+                      if (groupIds.length) {
+                        const { data: qStandings } = await supabase
+                          .from("group_standings")
+                          .select("team_id")
+                          .in("group_id", groupIds)
+                          .eq("is_qualified", true);
+                        if (qStandings && qStandings.length) qualifiedIds = qStandings.map((s: any) => s.team_id);
+                      }
+
+                      // Fallback: use teams.status === 'qualified'
+                      if (qualifiedIds.length === 0) {
+                        const { data: qTeams } = await supabase
+                          .from("teams")
+                          .select("id")
+                          .eq("tournament_id", selectedTournament)
+                          .eq("status", "qualified");
+                        if (qTeams) qualifiedIds = qTeams.map((t: any) => t.id);
+                      }
+
+                      if (!qualifiedIds || qualifiedIds.length === 0) {
+                        toast.error("لا توجد فرق متأهلة لإعادة التوليد");
+                        return;
+                      }
+
+                      // Remove existing non-group matches for this tournament
+                      await supabase
+                        .from("matches")
+                        .delete()
+                        .eq("tournament_id", selectedTournament)
+                        .neq("stage", "group");
+
+                      // Create first-round matches by pairing sequentially
+                      for (let i = 0; i < qualifiedIds.length; i += 2) {
+                        const team1 = qualifiedIds[i];
+                        const team2 = qualifiedIds[i + 1] || null;
+                        await supabase.from("matches").insert({
+                          tournament_id: selectedTournament,
+                          group_id: null,
+                          team1_id: team1,
+                          team2_id: team2,
+                          team1_score: 0,
+                          team2_score: 0,
+                          winner_id: null,
+                          match_type: "bo1",
+                          stage: "knockout",
+                          bracket_round: 1,
+                          bracket_position: Math.floor(i / 2) + 1,
+                        });
+                      }
+
+                      queryClient.invalidateQueries({ queryKey: ["matches", selectedTournament] });
+                      toast.success("تم إعادة توليد الإقصائيات");
+                    } catch (e) {
+                      toast.error("حدث خطأ أثناء إعادة التوليد");
+                    } finally {
+                      setIsRegenerating(false);
+                    }
+                  }}
+                  disabled={isRegenerating}
+                >
                   <RefreshCw className="w-4 h-4 ml-2" />
-                  إعادة توليد
+                  {isRegenerating ? "جارٍ إعادة التوليد..." : "إعادة توليد"}
                 </Button>
               </div>
               

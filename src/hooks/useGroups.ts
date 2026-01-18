@@ -170,8 +170,90 @@ export function useUpdateStanding() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: async (updated: any) => {
+      // Recompute qualifications for the group after a standing update
+      try {
+        const groupId = updated?.group_id;
+        if (groupId) {
+          // Get tournament id for this group
+          const { data: groupRow, error: groupErr } = await supabase
+            .from("groups")
+            .select("tournament_id")
+            .eq("id", groupId)
+            .maybeSingle();
+
+          if (groupErr) throw groupErr;
+
+          const tournamentId = groupRow?.tournament_id;
+
+          // Determine how many teams advance per group
+          let advanceCount = 2;
+          if (tournamentId) {
+            const { data: t, error: tErr } = await supabase
+              .from("tournaments")
+              .select("teams_per_group_qualify")
+              .eq("id", tournamentId)
+              .maybeSingle();
+            if (!tErr && t?.teams_per_group_qualify) advanceCount = t.teams_per_group_qualify;
+          }
+
+          // Fetch standings ordered by points desc
+          const { data: standings, error: standingErr } = await supabase
+            .from("group_standings")
+            .select("id, team_id")
+            .eq("group_id", groupId)
+            .order("points", { ascending: false });
+
+          if (standingErr) throw standingErr;
+
+          const top = (standings || []).slice(0, advanceCount).map((s: any) => s.team_id);
+          const topIds = (standings || []).slice(0, advanceCount).map((s: any) => s.id);
+
+          // Update is_qualified flags for this group's standings
+          if (standings && standings.length > 0) {
+            // Set is_qualified = true for topIds
+            await supabase
+              .from("group_standings")
+              .update({ is_qualified: true })
+              .in("id", topIds as any[]);
+
+            // Set is_qualified = false for others in the group
+            const otherIds = (standings || []).map((s: any) => s.id).filter((id: any) => !topIds.includes(id));
+            if (otherIds.length > 0) {
+              await supabase
+                .from("group_standings")
+                .update({ is_qualified: false })
+                .in("id", otherIds as any[]);
+            }
+
+            // Update teams' status: mark top teams as `qualified`
+            if (top.length > 0) {
+              await supabase
+                .from("teams")
+                .update({ status: "qualified" })
+                .in("id", top as any[]);
+            }
+
+            // For teams in this group that are not in top, if they were `qualified`, revert to `registered`
+            const otherTeamIds = (standings || []).map((s: any) => s.team_id).filter((tid: any) => !top.includes(tid));
+            if (otherTeamIds.length > 0) {
+              await supabase
+                .from("teams")
+                .update({ status: "registered" })
+                .in("id", otherTeamIds as any[])
+                .eq("status", "qualified");
+              // Note: we only revert teams that were previously `qualified` back to `registered`.
+            }
+          }
+        }
+      } catch (e) {
+        // ignore errors here but keep UI consistent
+        // eslint-disable-next-line no-console
+        console.debug("recompute qualifications error:", e);
+      }
+
       queryClient.invalidateQueries({ queryKey: ["group-standings"] });
+      queryClient.invalidateQueries({ queryKey: ["teams"] });
       toast.success("تم تحديث الترتيب");
     },
     onError: (error: any) => {
